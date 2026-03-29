@@ -25,6 +25,7 @@ export function ResumeDropzone(props: {
     accept: {
       "application/pdf": [".pdf"],
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/msword": [".doc"],
     },
     maxSize: 10 * 1024 * 1024,
   });

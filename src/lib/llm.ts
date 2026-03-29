@@ -30,7 +30,6 @@ export const ResumeAnalysisSchema = z.object({
 });
 
 export type ResumeAnalysis = z.infer<typeof ResumeAnalysisSchema>;
-type Provider = "gemini" | "claude";
 
 function buildPrompt(resumeText: string, jobDescription?: string) {
   return `You are an expert ATS resume reviewer.
@@ -69,52 +68,11 @@ export async function analyzeResumeWithLLM(args: {
   resumeText: string;
   jobDescription?: string;
 }) {
-  const provider = (process.env.LLM_PROVIDER || "gemini").toLowerCase() as Provider;
-  const fallbackProvider = (
-    process.env.LLM_FALLBACK_PROVIDER ||
-    (provider === "gemini" ? "claude" : "gemini")
-  ).toLowerCase() as Provider;
-
-  if (!isProvider(provider)) {
-    throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
-  }
-  if (!isProvider(fallbackProvider)) {
-    throw new Error(`Unsupported LLM_FALLBACK_PROVIDER: ${fallbackProvider}`);
-  }
-
+  const provider = (process.env.LLM_PROVIDER || "gemini").toLowerCase();
   const prompt = buildPrompt(args.resumeText, args.jobDescription);
-  const providers: Provider[] =
-    provider === fallbackProvider ? [provider] : [provider, fallbackProvider];
-  const errors: string[] = [];
 
-  for (const p of providers) {
-    try {
-      const rawText = await generateRawAnalysisText(p, prompt);
-      const parsed = parseLLMJson(rawText);
-      return ResumeAnalysisSchema.parse(parsed);
-    } catch (err: any) {
-      const msg = err?.message ?? "Unknown LLM error";
-      errors.push(`${p}: ${msg}`);
-    }
-  }
+  let rawText = "";
 
-  throw new Error(`All LLM providers failed. ${errors.join(" | ")}`);
-}
-
-function isProvider(provider: string): provider is Provider {
-  return provider === "gemini" || provider === "claude";
-}
-
-function parseLLMJson(rawText: string): unknown {
-  // Some providers still return stringified JSON.
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    return rawText;
-  }
-}
-
-async function generateRawAnalysisText(provider: Provider, prompt: string) {
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
@@ -142,12 +100,10 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
     }
 
     const data = await resp.json();
-    return (
-      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("") ?? ""
-    );
-  }
-
-  if (provider === "claude") {
+    rawText =
+      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join("") ??
+      "";
+  } else if (provider === "claude") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
 
@@ -173,8 +129,18 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
     }
 
     const data = await resp.json();
-    return data?.content?.map((c: any) => c?.text).join("") ?? "";
+    rawText = data?.content?.map((c: any) => c?.text).join("") ?? "";
+  } else {
+    throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
   }
 
-  throw new Error(`Unsupported provider: ${provider}`);
+  // Some providers still return stringified JSON.
+  let parsed: unknown;
+  try {
+    parsed = typeof rawText === "string" ? JSON.parse(rawText) : rawText;
+  } catch {
+    parsed = rawText;
+  }
+
+  return ResumeAnalysisSchema.parse(parsed);
 }

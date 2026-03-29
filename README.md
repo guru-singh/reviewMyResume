@@ -8,19 +8,6 @@
 - LLM: Gemini (default) or Claude (switch via env)
 - Payments: Razorpay Subscriptions + Webhook
 
-## Architecture
-- **Frontend**: Next.js App Router + Tailwind (minimal shadcn-style primitives in `src/components/ui.tsx`). Auth-protected dashboard behind middleware.
-- **Auth**: Supabase OTP + Google; middleware redirects `/dashboard` -> `/login` when not signed in.
-- **Data**: Postgres tables in `src/db/schema.sql` (`profiles`, `analyses`) with RLS. Analyses table stores raw resume text + LLM JSON result for usage tracking.
-- **Resume parsing**: `src/lib/parseResume.ts` handles PDF via `pdf-parse` and DOCX via `mammoth` (no `.doc` support).
-- **LLM pipeline**: `src/lib/llm.ts` builds structured JSON prompt, calls `LLM_PROVIDER` first, then auto-retries with `LLM_FALLBACK_PROVIDER` if needed. Output shape is validated with Zod.
-- **API routes**:
-  - `POST /api/analyze`: validate free/paid limit, parse resume, call LLM, persist analysis.
-  - `GET /api/me`: returns profile/usage for dashboard.
-  - `POST /api/razorpay/create-subscription`: creates subscription using plan IDs.
-  - `POST /api/razorpay/webhook`: verifies HMAC signature and updates subscription status with service role key.
-- **Payments**: Razorpay Checkout launched client-side from dashboard; webhook activation marks `profiles.subscription_status` to `active`.
-
 ## 1) Local setup
 
 1. Create a Supabase project
@@ -34,11 +21,10 @@
 
 ## 2) Environment
 
-Copy `.env.example` to `.env.local` and fill values:
-- Supabase URL + anon + service role keys
-- `NEXT_PUBLIC_APP_URL` (e.g., http://localhost:3000)
-- LLM keys: set `LLM_PROVIDER=gemini`, `LLM_FALLBACK_PROVIDER=claude`, and add both API keys for failover
-- Razorpay keys + plan IDs + webhook secret
+Copy `.env.local.example` to `.env.local`, fill in your Supabase/Razorpay credentials, and control the LLM flow with:
+
+- `ENABLE_REAL_GEMINI=false` to skip Gemini/Claude and return stub data (ATS-only UI).
+- `ENABLE_REAL_GEMINI=true` to allow real AI responses again.
 
 ## 3) Run
 
