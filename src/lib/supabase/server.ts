@@ -1,7 +1,35 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export function createSupabaseServerClient() {
+type CookiePair = { name: string; value: string };
+
+type SupabaseServerClientOptions = {
+  request?: Request;
+};
+
+const parseHeaderCookies = (header: string | null | undefined): CookiePair[] => {
+  if (!header) return [];
+  return header
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const eq = chunk.indexOf("=");
+      if (eq === -1) {
+        return { name: decodeURIComponent(chunk), value: "" };
+      }
+      const name = chunk.slice(0, eq);
+      const value = chunk.slice(eq + 1);
+      return {
+        name: decodeURIComponent(name),
+        value: decodeURIComponent(value),
+      };
+    });
+};
+
+export function createSupabaseServerClient(options: SupabaseServerClientOptions = {}) {
+  const { request } = options;
+  const cookieHeader = request?.headers.get("cookie") ?? null;
   const cookieStore = cookies();
 
   return createServerClient(
@@ -10,22 +38,25 @@ export function createSupabaseServerClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          if (request) {
+            return parseHeaderCookies(cookieHeader);
+          }
+          if (typeof cookieStore.getAll === "function") {
+            return cookieStore.getAll();
+          }
+          return [];
         },
         setAll(cookiesToSet) {
-          try {
+          if (typeof cookieStore.set === "function") {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options);
             });
-          } catch {
-            // Server Components can throw if cookies are set after streaming starts.
           }
         },
       },
       global: {
         headers: {
           "X-Client-Info": "resume-review-mvp",
-          "X-Forwarded-Host": headers().get("host") ?? "",
         },
       },
     }

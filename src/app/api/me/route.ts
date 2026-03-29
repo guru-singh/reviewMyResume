@@ -5,8 +5,8 @@ export const runtime = "nodejs";
 
 const FREE_LIMIT = 5;
 
-export async function GET() {
-  const supabase = createSupabaseServerClient();
+export async function GET(req: Request) {
+  const supabase = createSupabaseServerClient({ request: req });
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -26,8 +26,24 @@ export async function GET() {
 
   const used = count ?? 0;
 
+  const metadata = user.user_metadata ?? {};
+  const displayName =
+    (typeof metadata.full_name === "string" && metadata.full_name) ||
+    (typeof metadata.name === "string" && metadata.name) ||
+    user.email ||
+    null;
+  const avatarUrl =
+    (typeof metadata.avatar_url === "string" && metadata.avatar_url) ||
+    (typeof metadata.picture === "string" && metadata.picture) ||
+    null;
+
   return NextResponse.json({
-    user: { id: user.id, email: user.email },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: displayName,
+      avatarUrl,
+    },
     profile: profile ?? { plan: "free", subscription_status: "inactive" },
     usage: {
       used,
