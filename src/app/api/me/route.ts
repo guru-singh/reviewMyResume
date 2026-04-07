@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 const FREE_LIMIT = 5;
 
 export async function GET(req: Request) {
-  const supabase = createSupabaseServerClient({ request: req });
+ // const supabase = createSupabaseServerClient({ request: req });
+ const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

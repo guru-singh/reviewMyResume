@@ -68,7 +68,8 @@ const TEST_HTML_REPORT = `
 export async function POST(req: Request) {
   try {
     const bypassAI = shouldBypassAI();
-    const supabase = createSupabaseServerClient({ request: req });
+    //const supabase = createSupabaseServerClient({ request: req });
+    const supabase = await createSupabaseServerClient();
     const {
       data: { user },
       error: userErr,

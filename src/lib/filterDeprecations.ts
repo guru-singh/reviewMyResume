@@ -1,35 +1,81 @@
-const originalEmitWarning = process.emitWarning;
+type WarningArg = string | Error;
 
-type EmitWarningArgs = Parameters<typeof process.emitWarning>;
-
-function isBufferDeprecation(args: EmitWarningArgs) {
-  const [warning, optionsOrName] = args;
-
-  if (typeof warning === "object" && warning !== null) {
-    const code = "code" in warning ? (warning as NodeJS.EmitWarningOptions).code : undefined;
-    if (code === "DEP0005") {
-      return true;
-    }
-  }
-
-  if (typeof optionsOrName === "object" && optionsOrName !== null) {
-    const code = (optionsOrName as NodeJS.EmitWarningOptions).code;
-    if (code === "DEP0005") {
-      return true;
-    }
-  }
-
-  if (typeof warning === "string" && warning.includes("Buffer() is deprecated")) {
-    return true;
-  }
-
-  return false;
+function isEmitWarningOptions(value: unknown): value is { type?: string; code?: string } {
+  return typeof value === "object" && value !== null;
 }
 
-process.emitWarning = function emitWarning(...args: EmitWarningArgs) {
-  if (isBufferDeprecation(args)) {
-    return true;
+function isBufferDeprecation(
+  warning: WarningArg,
+  typeOrOptions?: string | { type?: string; code?: string },
+  code?: string
+) {
+  const warningText =
+    typeof warning === "string"
+      ? warning
+      : warning instanceof Error
+        ? warning.message
+        : "";
+
+  const warningType =
+    typeof typeOrOptions === "string"
+      ? typeOrOptions
+      : isEmitWarningOptions(typeOrOptions)
+        ? typeOrOptions.type ?? ""
+        : "";
+
+  const warningCode =
+    typeof code === "string"
+      ? code
+      : isEmitWarningOptions(typeOrOptions)
+        ? typeOrOptions.code ?? ""
+        : "";
+
+  return (
+    warningCode === "DEP0005" ||
+    warningType === "DeprecationWarning" ||
+    warningText.includes("Buffer() is deprecated")
+  );
+}
+
+const originalEmitWarning = process.emitWarning.bind(process);
+
+process.emitWarning = ((warning: WarningArg, a?: unknown, b?: unknown, c?: unknown) => {
+  const typeOrOptions = typeof a === "string" || isEmitWarningOptions(a) ? a : undefined;
+  const code = typeof b === "string" ? b : undefined;
+
+  if (isBufferDeprecation(warning, typeOrOptions, code)) {
+    return;
   }
 
-  return originalEmitWarning.apply(process, args as readonly Parameters<typeof process.emitWarning>);
-};
+  if (typeof a === "function") {
+    originalEmitWarning(warning, a);
+    return;
+  }
+
+  if (typeof a === "string" && typeof b === "string" && typeof c === "function") {
+    originalEmitWarning(warning, a, b, c);
+    return;
+  }
+
+  if (typeof a === "string" && typeof b === "function") {
+    originalEmitWarning(warning, a, b);
+    return;
+  }
+
+  if (isEmitWarningOptions(a)) {
+    originalEmitWarning(warning, a);
+    return;
+  }
+
+  if (typeof a === "string" && typeof b === "string") {
+    originalEmitWarning(warning, a, b);
+    return;
+  }
+
+  if (typeof a === "string") {
+    originalEmitWarning(warning, a);
+    return;
+  }
+
+  originalEmitWarning(warning);
+}) as typeof process.emitWarning;

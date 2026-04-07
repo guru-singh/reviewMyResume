@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 const COOKIE_NAMES = ["sb-access-token", "sb-refresh-token", "sb-ssr"];
 
 export async function POST(req: Request) {
-  const supabase = createSupabaseServerClient({ request: req });
+  //const supabase = createSupabaseServerClient({ request: req });
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signOut();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

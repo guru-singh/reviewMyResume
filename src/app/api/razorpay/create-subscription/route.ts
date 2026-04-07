@@ -12,7 +12,8 @@ const BodySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const supabase = createSupabaseServerClient({ request: req });
+   // const supabase = createSupabaseServerClient({ request: req });
+   const supabase = await createSupabaseServerClient();
     const {
       data: { user },
       error: userErr,

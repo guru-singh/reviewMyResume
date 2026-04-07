@@ -1,36 +1,8 @@
-import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-type CookiePair = { name: string; value: string };
-
-type SupabaseServerClientOptions = {
-  request?: Request;
-};
-
-const parseHeaderCookies = (header: string | null | undefined): CookiePair[] => {
-  if (!header) return [];
-  return header
-    .split(";")
-    .map((chunk) => chunk.trim())
-    .filter(Boolean)
-    .map((chunk) => {
-      const eq = chunk.indexOf("=");
-      if (eq === -1) {
-        return { name: decodeURIComponent(chunk), value: "" };
-      }
-      const name = chunk.slice(0, eq);
-      const value = chunk.slice(eq + 1);
-      return {
-        name: decodeURIComponent(name),
-        value: decodeURIComponent(value),
-      };
-    });
-};
-
-export function createSupabaseServerClient(options: SupabaseServerClientOptions = {}) {
-  const { request } = options;
-  const cookieHeader = request?.headers.get("cookie") ?? null;
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,25 +10,16 @@ export function createSupabaseServerClient(options: SupabaseServerClientOptions 
     {
       cookies: {
         getAll() {
-          if (request) {
-            return parseHeaderCookies(cookieHeader);
-          }
-          if (typeof cookieStore.getAll === "function") {
-            return cookieStore.getAll();
-          }
-          return [];
+          return cookieStore.getAll();
         },
-        setAll(cookiesToSet) {
-          if (typeof cookieStore.set === "function") {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          }
-        },
-      },
-      global: {
-        headers: {
-          "X-Client-Info": "resume-review-mvp",
+        setAll(
+          cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]
+        ) {
+          try {
+            for (const { name, value, options } of cookiesToSet) {
+              cookieStore.set(name, value, options as any);
+            }
+          } catch {}
         },
       },
     }
