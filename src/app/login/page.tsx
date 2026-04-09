@@ -1,6 +1,8 @@
-
 "use client";
+
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,9 +37,20 @@ const benefitCards = [
   },
 ];
 
+function getAppUrl() {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "";
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -63,13 +76,18 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
+
     try {
+      const supabase = createSupabaseBrowserClient();
+      const appUrl = getAppUrl();
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
+          emailRedirectTo: appUrl ? `${appUrl}/dashboard` : undefined,
         },
       });
+
       if (error) throw error;
       setMsg("Check your inbox for the secure login link.");
     } catch (error) {
@@ -82,11 +100,18 @@ export default function LoginPage() {
   async function signInWithGoogle() {
     setLoading(true);
     setMsg(null);
+
     try {
+      const supabase = createSupabaseBrowserClient();
+      const appUrl = getAppUrl();
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard` },
+        options: {
+          redirectTo: appUrl ? `${appUrl}/dashboard` : undefined,
+        },
       });
+
       if (error) throw error;
     } catch (error) {
       setMsg(getErrorMessage(error, "Something went wrong"));
@@ -147,7 +172,9 @@ export default function LoginPage() {
                 <div className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-500">
                   Welcome back
                 </div>
-                <div className="text-3xl font-semibold text-slate-950">Choose how you want to sign in</div>
+                <div className="text-3xl font-semibold text-slate-950">
+                  Choose how you want to sign in
+                </div>
                 <div className="text-sm leading-6 text-slate-600">
                   Your reports, uploads, and ATS history stay connected to this account.
                 </div>
@@ -188,12 +215,17 @@ export default function LoginPage() {
               </form>
 
               <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
-                {msg ?? "Passwordless auth powered by Supabase. We will email you a secure link to continue."}
+                {msg ??
+                  "Passwordless auth powered by Supabase. We will email you a secure link to continue."}
               </div>
 
               <div className="text-xs leading-6 text-slate-500">
                 By continuing, you agree to use this workspace for your own resume reviews. Need to
-                go back first? <Link href="/" className="font-semibold text-slate-900 underline-offset-2 hover:underline">Return home</Link>.
+                go back first?{" "}
+                <Link href="/" className="font-semibold text-slate-900 underline-offset-2 hover:underline">
+                  Return home
+                </Link>
+                .
               </div>
             </CardContent>
           </Card>
@@ -204,9 +236,7 @@ export default function LoginPage() {
             <article
               key={card.title}
               className={`rounded-[1.8rem] border p-6 shadow-[0_18px_45px_rgba(15,23,42,0.07)] ${
-                index === 1
-                  ? "border-sky-100 bg-[#eef6ff]"
-                  : "border-slate-200 bg-white"
+                index === 1 ? "border-sky-100 bg-[#eef6ff]" : "border-slate-200 bg-white"
               }`}
             >
               <div className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
