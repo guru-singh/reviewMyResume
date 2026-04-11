@@ -4,6 +4,9 @@ import { cookies } from "next/headers";
 export async function createSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("SUPABASE supabaseAnonKey:", supabaseAnonKey);
+
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(
