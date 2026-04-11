@@ -108,7 +108,8 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: appUrl ? `${appUrl}/dashboard` : undefined,
+          redirectTo: "https://reviewmyresume-48414740448.asia-south1.run.app/dashboard",
+          //redirectTo: appUrl ? `${appUrl}/dashboard` : undefined,
         },
       });
 
