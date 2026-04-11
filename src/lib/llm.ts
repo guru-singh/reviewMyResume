@@ -67,6 +67,7 @@ export async function analyzeResumeWithLLM(args: {
   if (!isProvider(provider)) {
     throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
   }
+
   if (!isProvider(fallbackProvider)) {
     throw new Error(`Unsupported LLM_FALLBACK_PROVIDER: ${fallbackProvider}`);
   }
@@ -75,6 +76,7 @@ export async function analyzeResumeWithLLM(args: {
   const configuredProviders = (
     provider === fallbackProvider ? [provider] : [provider, fallbackProvider]
   ).filter(isConfiguredProvider);
+
   const errors: string[] = [];
   const rawResponses: Partial<Record<Provider, string>> = {};
 
@@ -118,22 +120,16 @@ function isConfiguredProvider(provider: Provider) {
   if (provider === "gemini") {
     return Boolean(process.env.GEMINI_API_KEY);
   }
+
   if (provider === "claude") {
     return Boolean(process.env.ANTHROPIC_API_KEY);
   }
+
   return false;
 }
 
 function normalizeGeminiModel(model: string) {
   return model.replace(/^models\//, "");
-}
-
-function sanitizeInvalidUnicodeEscapes(text: string) {
-  return text.replace(/\\u(?![0-9a-fA-F]{4})/g, "\\\\u");
-}
-
-function safeJsonParse(text: string) {
-  return JSON.parse(sanitizeInvalidUnicodeEscapes(text));
 }
 
 async function writeProviderLog(provider: Provider, responseText: string) {
@@ -147,59 +143,12 @@ async function writeProviderLog(provider: Provider, responseText: string) {
   }
 }
 
-function extractGeminiTextFromRawResponse(responseText: string) {
-  const match = responseText.match(/"text"\s*:\s*"([\s\S]*?)"\s*,\s*"thoughtSignature"/);
-  if (!match?.[1]) return null;
-
-  const encodedText = `"${match[1]}"`;
-  try {
-    return safeJsonParse(encodedText);
-  } catch {
-    return match[1]
-      .replace(/\\"/g, '"')
-      .replace(/\\n/g, "\n")
-      .replace(/\\\\/g, "\\");
-  }
-}
-
-function parseGeminiGenerateContentResponse(responseText: string) {
-  let data: unknown;
-  try {
-    data = safeJsonParse(responseText);
-  } catch {
-    const extractedText = extractGeminiTextFromRawResponse(responseText);
-    return extractedText ? sanitizeInvalidUnicodeEscapes(extractedText) : "";
-  }
-
-  const candidates = Array.isArray((data as { candidates?: unknown[] })?.candidates)
-    ? (data as { candidates: unknown[] }).candidates
-    : [];
-
-  const parts = candidates.flatMap((candidate) => {
-    if (!candidate || typeof candidate !== "object") return [];
-    const content = (candidate as { content?: unknown }).content;
-    if (!content || typeof content !== "object") return [];
-    const candidateParts = (content as { parts?: unknown[] }).parts;
-    return Array.isArray(candidateParts) ? candidateParts : [];
-  });
-
-  const text = parts
-    .map((part) => {
-      if (part && typeof part === "object" && "text" in part) {
-        return ((part as { text?: unknown }).text as string | undefined) ?? "";
-      }
-      return "";
-    })
-    .join("")
-    .trim();
-
-  return sanitizeInvalidUnicodeEscapes(text);
-}
-
 async function generateRawAnalysisText(provider: Provider, prompt: string) {
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+    if (!apiKey) {
+      throw new Error("Missing GEMINI_API_KEY");
+    }
 
     const apiVersion = process.env.GEMINI_API_VERSION || "v1beta";
     const model = normalizeGeminiModel(process.env.GEMINI_MODEL || "gemini-1.5-pro");
@@ -226,18 +175,38 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
       }),
     });
 
-    const responseText = await resp.text();
-    await writeProviderLog("gemini", responseText);
+    const rawText = await resp.text();
+    await writeProviderLog("gemini", rawText);
 
     if (!resp.ok) {
-      throw new Error(`Gemini error: ${resp.status} ${responseText}`);
+      throw new Error(`Gemini error: ${resp.status} ${rawText}`);
     }
 
-    return parseGeminiGenerateContentResponse(responseText);
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (error) {
+      console.error("[gemini raw parse failed]", rawText);
+      throw new Error("Failed to parse Gemini response");
+    }
+
+    const html =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+        .join("")
+        .trim() || "";
+
+    if (!html) {
+      throw new Error("Gemini returned empty text");
+    }
+
+    return html;
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY");
+  }
 
   const model = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest";
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -255,25 +224,30 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
     }),
   });
 
-  const responseText = await resp.text();
-  await writeProviderLog("claude", responseText);
+  const rawText = await resp.text();
+  await writeProviderLog("claude", rawText);
 
   if (!resp.ok) {
-    throw new Error(`Claude error: ${resp.status} ${responseText}`);
+    throw new Error(`Claude error: ${resp.status} ${rawText}`);
   }
 
-  const data = safeJsonParse(responseText);
-  const content = Array.isArray((data as { content?: unknown[] })?.content)
-    ? (data as { content: unknown[] }).content
-    : [];
+  let data: any;
+  try {
+    data = JSON.parse(rawText);
+  } catch (error) {
+    console.error("[claude raw parse failed]", rawText);
+    throw new Error("Failed to parse Claude response");
+  }
 
-  return content
-    .map((item) => {
-      if (item && typeof item === "object" && "text" in item) {
-        return ((item as { text?: unknown }).text as string | undefined) ?? "";
-      }
-      return "";
-    })
-    .join("")
-    .trim();
+  const html =
+    data?.content
+      ?.map((item: any) => (typeof item?.text === "string" ? item.text : ""))
+      .join("")
+      .trim() || "";
+
+  if (!html) {
+    throw new Error("Claude returned empty text");
+  }
+
+  return html;
 }
