@@ -115,28 +115,26 @@ export default function LoginPage() {
   }
 
   async function signInWithGoogle() {
-    setLoading(true);
-    setMsg(null);
+  setLoading(true);
+  setMsg(null);
 
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const appUrl = getAppUrl();
+  try {
+    const supabase = createSupabaseBrowserClient();
 
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: "https://reviewmyresume-48414740448.asia-south1.run.app/dashboard",
-          //redirectTo: appUrl ? `${appUrl}/dashboard` : undefined,
-        },
-      });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: "https://reviewmyresume-48414740448.asia-south1.run.app/auth/callback?next=/dashboard",
+      },
+    });
 
-      if (error) throw error;
-    } catch (error) {
-      setMsg(getErrorMessage(error, "Something went wrong"));
-    } finally {
-      setLoading(false);
-    }
+    if (error) throw error;
+  } catch (error) {
+    setMsg(error instanceof Error ? error.message : "Something went wrong");
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#eef3f8_0%,#f8f4eb_100%)] text-slate-950">
