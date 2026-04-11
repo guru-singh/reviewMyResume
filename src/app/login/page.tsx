@@ -55,22 +55,39 @@ export default function LoginPage() {
   const [loading, setLoading] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    async function verifySession() {
-      try {
+ React.useEffect(() => {
+  async function handleAuthCallback() {
+    try {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      const next = url.searchParams.get("next") || "/dashboard";
+
+      if (!code) {
         const res = await fetch("/api/me", { cache: "no-store", credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
         if (data.user) {
           router.replace("/dashboard");
         }
-      } catch (error) {
-        console.error("Failed to hydrate session", error);
+        return;
       }
-    }
 
-    void verifySession();
-  }, [router]);
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (error) {
+        throw error;
+      }
+
+      router.replace(next);
+    } catch (error) {
+      console.error("Failed to handle auth callback", error);
+      setMsg(error instanceof Error ? error.message : "Login failed");
+    }
+  }
+
+  void handleAuthCallback();
+}, [router]);
 
   async function signInWithEmail(e: React.FormEvent) {
     e.preventDefault();
