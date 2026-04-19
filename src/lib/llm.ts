@@ -1,16 +1,21 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { mkdir, writeFile } from "fs/promises";
+import path from "path";
 
 type Provider = "gemini" | "claude";
 
-type LLMAnalysisResult = {
-  htmlReport: string;
-  debug?: {
-    provider: Provider;
-    rawPreview: string;
-  };
-  rawResponses: Partial<Record<Provider, string>>;
-};
+function normalizeGeminiModel(model: string) {
+  return model.replace(/^models\//, "");
+}
+
+// 🔥 Strong sanitizer (critical for your bug)
+function sanitizeForLLM(input = "") {
+  return input
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/[\uD800-\uDFFF]/g, "")
+    .replace(/\\u(?![0-9a-fA-F]{4})/g, "")
+    .trim();
+}
 
 function buildPrompt(resumeText: string, jobDescription?: string) {
   return `You are an expert ATS resume reviewer.
@@ -38,9 +43,6 @@ HTML requirements:
   - Improvements
   - Upgrades
   - Quick Wins
-- In the ATS Score section, include the final numeric score clearly in plain text.
-- In the Keyword Match section, include two lists: matched and missing.
-- If some information is missing, still include the section and show an empty list or a short placeholder sentence.
 
 Resume text:
 """
@@ -52,84 +54,6 @@ ${jobDescription ? `Job description:
 ${jobDescription}
 """` : "No job description provided."}
 `;
-}
-
-export async function analyzeResumeWithLLM(args: {
-  resumeText: string;
-  jobDescription?: string;
-}): Promise<LLMAnalysisResult> {
-  const provider = (process.env.LLM_PROVIDER || "gemini").toLowerCase() as Provider;
-  const fallbackProvider = (
-    process.env.LLM_FALLBACK_PROVIDER ||
-    (provider === "gemini" ? "claude" : "gemini")
-  ).toLowerCase() as Provider;
-
-  if (!isProvider(provider)) {
-    throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
-  }
-
-  if (!isProvider(fallbackProvider)) {
-    throw new Error(`Unsupported LLM_FALLBACK_PROVIDER: ${fallbackProvider}`);
-  }
-
-  const prompt = buildPrompt(args.resumeText, args.jobDescription);
-  const configuredProviders = (
-    provider === fallbackProvider ? [provider] : [provider, fallbackProvider]
-  ).filter(isConfiguredProvider);
-
-  const errors: string[] = [];
-  const rawResponses: Partial<Record<Provider, string>> = {};
-
-  if (configuredProviders.length === 0) {
-    throw new Error(
-      "No configured LLM providers. Add GEMINI_API_KEY or ANTHROPIC_API_KEY to continue."
-    );
-  }
-
-  for (const currentProvider of configuredProviders) {
-    try {
-      const htmlReport = await generateRawAnalysisText(currentProvider, prompt);
-      rawResponses[currentProvider] = htmlReport;
-
-      if (!htmlReport.trim()) {
-        throw new Error("Provider returned an empty response");
-      }
-
-      return {
-        htmlReport,
-        debug: {
-          provider: currentProvider,
-          rawPreview: htmlReport.slice(0, 1200),
-        },
-        rawResponses,
-      };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown LLM error";
-      errors.push(`${currentProvider}: ${msg}`);
-    }
-  }
-
-  throw new Error(`All LLM providers failed. ${errors.join(" | ")}`);
-}
-
-function isProvider(provider: string): provider is Provider {
-  return provider === "gemini" || provider === "claude";
-}
-
-function isConfiguredProvider(provider: Provider) {
-  if (provider === "gemini") {
-    return Boolean(process.env.GEMINI_API_KEY);
-  }
-
-  if (provider === "claude") {
-    return Boolean(process.env.ANTHROPIC_API_KEY);
-  }
-
-  return false;
-}
-
-function normalizeGeminiModel(model: string) {
-  return model.replace(/^models\//, "");
 }
 
 async function writeProviderLog(
@@ -147,16 +71,20 @@ async function writeProviderLog(
   }
 }
 
-async function generateRawAnalysisText(provider: Provider, prompt: string) {
+async function generateRawAnalysisText(
+  provider: Provider,
+  prompt: string
+) {
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GEMINI_API_KEY");
-    }
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
     const apiVersion = process.env.GEMINI_API_VERSION || "v1beta";
-    const model = normalizeGeminiModel(process.env.GEMINI_MODEL || "gemini-1.5-pro");
+    const model = normalizeGeminiModel(
+      process.env.GEMINI_MODEL || "gemini-1.5-pro"
+    );
     const isGemini25Pro = /^gemini-2\.5-pro/i.test(model);
+
     const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
 
     const payload = {
@@ -166,29 +94,20 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
         maxOutputTokens: 3200,
         responseMimeType: "text/plain",
         ...(isGemini25Pro
-          ? {
-              thinkingConfig: {
-                thinkingBudget: 128,
-              },
-            }
+          ? { thinkingConfig: { thinkingBudget: 128 } }
           : {}),
       },
     };
 
     const payloadJson = JSON.stringify(payload);
 
-    console.log("===== GEMINI REQUEST START =====");
-    console.log("Gemini URL:", url.replace(apiKey, "***"));
+    // 🔍 LOG REQUEST
+    console.log("===== GEMINI REQUEST =====");
     console.log("Prompt length:", prompt.length);
-    console.log("Prompt (JSON view, first 2000 chars):");
-    console.log(JSON.stringify(prompt).slice(0, 2000));
-    console.log("Payload preview (first 2000 chars):");
-    console.log(payloadJson.slice(0, 2000));
-    console.log("===== GEMINI REQUEST END =====");
+    console.log("Prompt preview:", JSON.stringify(prompt).slice(0, 1000));
+    console.log("Payload preview:", payloadJson.slice(0, 1000));
 
-    //await writeProviderLog("gemini", payloadJson);
     await writeProviderLog("gemini", "request", payloadJson);
-
 
     const resp = await fetch(url, {
       method: "POST",
@@ -198,13 +117,11 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
 
     const rawText = await resp.text();
 
-    console.log("===== GEMINI RESPONSE START =====");
+    // 🔍 LOG RESPONSE
+    console.log("===== GEMINI RESPONSE =====");
     console.log("Status:", resp.status);
-    console.log("Response preview (first 2000 chars):");
-    console.log(rawText.slice(0, 2000));
-    console.log("===== GEMINI RESPONSE END =====");
+    console.log("Response preview:", rawText.slice(0, 1000));
 
-    //await writeProviderLog("gemini", rawText);
     await writeProviderLog("gemini", "response", rawText);
 
     if (!resp.ok) {
@@ -215,69 +132,41 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
     try {
       data = JSON.parse(rawText);
     } catch (error) {
-      console.error("[gemini raw parse failed]", rawText);
+      console.error("❌ Gemini JSON parse failed:", rawText);
       throw new Error("Failed to parse Gemini response");
     }
 
     const html =
       data?.candidates?.[0]?.content?.parts
-        ?.map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+        ?.map((p: any) => p?.text || "")
         .join("")
         .trim() || "";
 
     if (!html) {
-      throw new Error("Gemini returned empty text");
+      throw new Error("Gemini returned empty HTML");
     }
 
     return html;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY");
-  }
+  throw new Error("Unsupported provider");
+}
 
-  const model = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest";
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2400,
-      temperature: 0.2,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+export async function analyzeResumeWithLLM({
+  resumeText,
+  jobDescription,
+}: {
+  resumeText: string;
+  jobDescription?: string;
+}) {
+  const safeResume = sanitizeForLLM(resumeText);
+  const safeJD = sanitizeForLLM(jobDescription || "");
 
-  const rawText = await resp.text();
-  //await writeProviderLog("claude", rawText);
-  await writeProviderLog("claude", "response", rawText);
+  const prompt = buildPrompt(safeResume, safeJD);
 
-  if (!resp.ok) {
-    throw new Error(`Claude error: ${resp.status} ${rawText}`);
-  }
+  const html = await generateRawAnalysisText("gemini", prompt);
 
-  let data: any;
-  try {
-    data = JSON.parse(rawText);
-  } catch (error) {
-    console.error("[claude raw parse failed]", rawText);
-    throw new Error("Failed to parse Claude response");
-  }
-
-  const html =
-    data?.content
-      ?.map((item: any) => (typeof item?.text === "string" ? item.text : ""))
-      .join("")
-      .trim() || "";
-
-  if (!html) {
-    throw new Error("Claude returned empty text");
-  }
-
-  return html;
+  return {
+    htmlReport: html,
+  };
 }
