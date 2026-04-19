@@ -67,6 +67,11 @@ const TEST_HTML_REPORT = `
 
 export async function POST(req: Request) {
   try {
+
+    console.error("=== ANALYZE COOKIE CHECK START ===");
+    console.error((await cookies()).getAll().map(c => c.name));
+    console.error("=== ANALYZE COOKIE CHECK END ===");
+
     const bypassAI = shouldBypassAI();
     //const supabase = createSupabaseServerClient({ request: req });
     const supabase = await createSupabaseServerClient();
