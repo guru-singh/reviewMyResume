@@ -8,12 +8,14 @@ export async function extractTextFromResume(file: File): Promise<string> {
 
   if (name.endsWith(".pdf")) {
     const out = await pdf(buf);
-    return normalizeText(out.text);
+    //return normalizeText(out.text);
+    return (out.text);
   }
 
   if (name.endsWith(".docx")) {
     const out = await mammoth.extractRawText({ buffer: buf });
-    return normalizeText(out.value);
+   // return normalizeText(out.value);
+    return (out.value);
   }
 
   throw new Error("Unsupported file type. Please upload PDF or DOCX.");
