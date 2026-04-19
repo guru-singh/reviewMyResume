@@ -121,10 +121,18 @@ export default function LoginPage() {
   try {
     const supabase = createSupabaseBrowserClient();
 
+   const baseUrl =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_SITE_URL;
+    // console.log('*********************************URLS*********************************');
+    // console.log('Base URL for OAuth redirect:', baseUrl);
+    // console.log('*********************************URLS*********************************');
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "https://reviewmyresume-48414740448.asia-south1.run.app/auth/callback?next=/dashboard",
+        redirectTo: `${baseUrl}/auth/callback?next=/dashboard`,
       },
     });
 

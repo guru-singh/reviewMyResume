@@ -132,14 +132,18 @@ function normalizeGeminiModel(model: string) {
   return model.replace(/^models\//, "");
 }
 
-async function writeProviderLog(provider: Provider, responseText: string) {
+async function writeProviderLog(
+  provider: Provider,
+  kind: "request" | "response",
+  text: string
+) {
   try {
     const dir = path.join(process.cwd(), ".llm-logs");
     await mkdir(dir, { recursive: true });
-    const file = path.join(dir, `${provider}-latest.txt`);
-    await writeFile(file, responseText, "utf8");
+    const file = path.join(dir, `${provider}-${kind}-latest.txt`);
+    await writeFile(file, text, "utf8");
   } catch (error) {
-    console.error(`[${provider} log write failed]`, error);
+    console.error(`[${provider} ${kind} log write failed]`, error);
   }
 }
 
@@ -155,28 +159,53 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
     const isGemini25Pro = /^gemini-2\.5-pro/i.test(model);
     const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
 
+    const payload = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 3200,
+        responseMimeType: "text/plain",
+        ...(isGemini25Pro
+          ? {
+              thinkingConfig: {
+                thinkingBudget: 128,
+              },
+            }
+          : {}),
+      },
+    };
+
+    const payloadJson = JSON.stringify(payload);
+
+    console.log("===== GEMINI REQUEST START =====");
+    console.log("Gemini URL:", url.replace(apiKey, "***"));
+    console.log("Prompt length:", prompt.length);
+    console.log("Prompt (JSON view, first 2000 chars):");
+    console.log(JSON.stringify(prompt).slice(0, 2000));
+    console.log("Payload preview (first 2000 chars):");
+    console.log(payloadJson.slice(0, 2000));
+    console.log("===== GEMINI REQUEST END =====");
+
+    //await writeProviderLog("gemini", payloadJson);
+    await writeProviderLog("gemini", "request", payloadJson);
+
+
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 3200,
-          responseMimeType: "text/plain",
-          ...(isGemini25Pro
-            ? {
-                thinkingConfig: {
-                  thinkingBudget: 128,
-                },
-              }
-            : {}),
-        },
-      }),
+      body: payloadJson,
     });
 
     const rawText = await resp.text();
-    await writeProviderLog("gemini", rawText);
+
+    console.log("===== GEMINI RESPONSE START =====");
+    console.log("Status:", resp.status);
+    console.log("Response preview (first 2000 chars):");
+    console.log(rawText.slice(0, 2000));
+    console.log("===== GEMINI RESPONSE END =====");
+
+    //await writeProviderLog("gemini", rawText);
+    await writeProviderLog("gemini", "response", rawText);
 
     if (!resp.ok) {
       throw new Error(`Gemini error: ${resp.status} ${rawText}`);
@@ -225,7 +254,8 @@ async function generateRawAnalysisText(provider: Provider, prompt: string) {
   });
 
   const rawText = await resp.text();
-  await writeProviderLog("claude", rawText);
+  //await writeProviderLog("claude", rawText);
+  await writeProviderLog("claude", "response", rawText);
 
   if (!resp.ok) {
     throw new Error(`Claude error: ${resp.status} ${rawText}`);
