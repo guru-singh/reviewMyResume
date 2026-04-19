@@ -4,12 +4,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Console } from "console";
 
 
-export async function GET2(request: NextRequest) {
-  console.log("🔥 CALLBACK HIT 🔥");
-  console.log("Callback URL:", request.url);
+// export async function GET2(request: NextRequest) {
+//   console.log("🔥 CALLBACK HIT 🔥");
+//   console.log("Callback URL:", request.url);
 
-  return NextResponse.json({ ok: true });
-}
+//   return NextResponse.json({ ok: true });
+// }
 export async function GET(request: NextRequest) {
     console.log('==================SUBABASE CLIENT CREATED==================*************');
 
