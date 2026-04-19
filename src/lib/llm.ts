@@ -102,10 +102,10 @@ async function generateRawAnalysisText(
     const payloadJson = JSON.stringify(payload);
 
     // 🔍 LOG REQUEST
-    console.log("===== GEMINI REQUEST =====");
-    console.log("Prompt length:", prompt.length);
-    console.log("Prompt preview:", JSON.stringify(prompt).slice(0, 1000));
-    console.log("Payload preview:", payloadJson.slice(0, 1000));
+    console.error("===== GEMINI REQUEST =====");
+    console.error("Prompt length:", prompt.length);
+    console.error("Prompt preview:", JSON.stringify(prompt).slice(0, 1000));
+    console.error("Payload preview:", payloadJson.slice(0, 1000));
 
     await writeProviderLog("gemini", "request", payloadJson);
 
@@ -118,9 +118,9 @@ async function generateRawAnalysisText(
     const rawText = await resp.text();
 
     // 🔍 LOG RESPONSE
-    console.log("===== GEMINI RESPONSE =====");
-    console.log("Status:", resp.status);
-    console.log("Response preview:", rawText.slice(0, 1000));
+    console.error("===== GEMINI RESPONSE =====");
+    console.error("Status:", resp.status);
+    console.error("Response preview:", rawText.slice(0, 1000));
 
     await writeProviderLog("gemini", "response", rawText);
 

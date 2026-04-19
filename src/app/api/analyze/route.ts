@@ -158,6 +158,10 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    console.error("=== ANALYZE ROUTE ERROR START ===");
+    console.error(error);
+    console.error("ERROR MESSAGE:", getErrorMessage(error));
+    console.error("=== ANALYZE ROUTE ERROR END ===");
     console.error("[api/analyze error]", error);
     const msg = getErrorMessage(error);
     return NextResponse.json({ error: msg }, { status: 500 });
