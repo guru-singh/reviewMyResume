@@ -250,6 +250,17 @@ export default function DashboardPage() {
                       ? "Your paid plan is active, so you can keep running analyses without a limit."
                       : `You can analyze up to ${usageLimit} resumes for free before payment is required.`}
                   </div>
+
+                  {!paidActive ? (
+                    <div className="mt-4">
+                      <Link
+                        href="/pricing"
+                        className="inline-flex items-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+                      >
+                        View packages
+                      </Link>
+                    </div>
+                  ) : null}
                 </>
               )}
               <div className="mt-4 rounded-2xl bg-white/10 px-4 py-4">
