@@ -121,10 +121,7 @@ export default function LoginPage() {
   try {
     const supabase = createSupabaseBrowserClient();
 
-   const baseUrl =
-  typeof window !== "undefined"
-    ? window.location.origin
-    : process.env.NEXT_PUBLIC_SITE_URL;
+   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     console.log('*********************************URLS*********************************');
     console.log('Base URL for OAuth redirect:', baseUrl);
     console.log('*********************************URLS*********************************');
