@@ -69,6 +69,21 @@ const testimonials = [
   },
 ];
 
+const atsReasons = [
+  {
+    title: "Pass the first filter",
+    desc: "Many resumes are screened by software before a recruiter reads them. ATS readiness helps your application move forward.",
+  },
+  {
+    title: "Match the role better",
+    desc: "Relevant keywords, clean structure, and role alignment make it easier for hiring systems to understand your fit.",
+  },
+  {
+    title: "Improve shortlist chances",
+    desc: "A stronger ATS score helps your experience get seen, understood, and evaluated faster.",
+  },
+];
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f6f1e8_0%,#f2f5f8_48%,#ffffff_100%)] text-slate-950">
@@ -186,6 +201,36 @@ export default function Home() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="rounded-[2.2rem] bg-white px-6 py-8 shadow-[0_20px_60px_rgba(15,23,42,0.06)] sm:px-8">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600">
+              Why ATS score matters
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950">
+              Your resume is often screened before a recruiter even reads it
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">
+              Most companies use Applicant Tracking Systems to scan resumes for relevant keywords,
+              role alignment, and clear structure. If your resume does not match what the system
+              expects, it may never reach a human reviewer, even if you are qualified.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {atsReasons.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-[1.6rem] bg-slate-50 p-5"
+              >
+                <div className="text-base font-semibold text-slate-950">{item.title}</div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{item.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
