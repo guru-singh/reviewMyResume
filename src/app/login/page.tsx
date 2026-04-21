@@ -121,17 +121,21 @@ export default function LoginPage() {
   try {
     const supabase = createSupabaseBrowserClient();
 
-   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+   const baseUrl = window.location.origin;
     console.log('*********************************URLS*********************************');
-    console.log('Base URL for OAuth redirect:', baseUrl);
+    console.log("OAuth redirectTo:", `${window.location.origin}/auth/callback?next=/dashboard`);
     console.log('*********************************URLS*********************************');
 
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${baseUrl}/auth/callback?next=/dashboard`,
-      },
-    });
+  provider: "google",
+  options: {
+    redirectTo: `${baseUrl}/auth/callback?next=/dashboard`,
+  },
+});
+
+if (error) {
+  console.error("Google sign-in error:", error);
+}
 
     if (error) throw error;
   } catch (error) {

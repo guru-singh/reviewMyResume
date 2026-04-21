@@ -1,29 +1,46 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Record<string, unknown>;
+};
 
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/dashboard";
 
-  if (code) {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => [],
-          setAll: () => {},
-        },
-      }
-    );
+  const response = NextResponse.redirect(new URL(next, url.origin));
 
-    await supabase.auth.exchangeCodeForSession(code);
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options as any);
+          });
+        },
+      },
+    }
+  );
+
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      console.error("OAuth exchange error:", error);
+      return NextResponse.redirect(
+        new URL("/login?error=oauth_callback", url.origin)
+      );
+    }
   }
 
-  // ✅ CRITICAL FIX — use current request origin
-  const redirectUrl = new URL(next, url.origin);
-
-  return NextResponse.redirect(redirectUrl);
+  return response;
 }
