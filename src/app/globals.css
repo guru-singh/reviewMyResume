@@ -19,8 +19,40 @@
   }
 }
 
+html,
 body {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  background: var(--background);
+}
+
+.profile-menu {
+  position: relative;
+  z-index: 9999;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10000;
 }

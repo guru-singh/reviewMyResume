@@ -20,7 +20,7 @@ for (const version of versions) {
     }
 
     const data = await res.json();
-    console.log(`\n============ ${version} ============`);
+   // console.log(`\n============ ${version} ============`);
     if (!Array.isArray(data.models)) {
       console.log(`No models listed for ${version}`);
       continue;
@@ -30,8 +30,8 @@ for (const version of versions) {
       const supported = Array.isArray(model.supportedGenerationMethods)
         ? model.supportedGenerationMethods.join(", ")
         : "(none)";
-      console.log(`- ${model.name} (${model.version || ""}): ${model.displayName || ""}`);
-      console.log(`  methods=${supported}`);
+     // console.log(`- ${model.name} (${model.version || ""}): ${model.displayName || ""}`);
+     // console.log(`  methods=${supported}`);
       if (model.inputTokenLimit) console.log(`  inputTokens=${model.inputTokenLimit}`);
       if (model.outputTokenLimit) console.log(`  outputTokens=${model.outputTokenLimit}`);
     });

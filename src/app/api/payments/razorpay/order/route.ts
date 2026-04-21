@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { planId } = body;
 
-    console.log("[razorpay/order] incoming planId:", planId);
+    //console.log("[razorpay/order] incoming planId:", planId);
 
     const plan = getPackage(planId);
 

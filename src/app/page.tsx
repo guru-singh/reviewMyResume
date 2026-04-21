@@ -71,7 +71,7 @@ const testimonials = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f6f1e8_0%,#f2f5f8_48%,#ffffff_100%)] text-slate-950">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#f6f1e8_0%,#f2f5f8_48%,#ffffff_100%)] text-slate-950">
       <section className="relative isolate">
         <div className="absolute inset-x-0 top-0 -z-10 h-[42rem] bg-[#142136]" />
         <div className="absolute left-[-8rem] top-[-4rem] -z-10 h-72 w-72 rounded-full bg-[#ffcf70]/35 blur-3xl" />

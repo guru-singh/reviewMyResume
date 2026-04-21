@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     switch (event.event) {
       case "payment.captured": {
         const payment = event.payload?.payment?.entity;
-        console.log("payment.captured", payment?.id);
+       console.log("payment.captured", payment?.id);
 
         // TODO:
         // mark matching purchase paid in DB

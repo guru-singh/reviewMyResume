@@ -21,7 +21,7 @@ export function PricingCard({ plan }: Props) {
     try {
       setLoading(true);
 
-      console.log("PricingCard plan prop:", plan);
+    //  console.log("PricingCard plan prop:", plan);
 
       if (!plan || !plan.id) {
         alert("Plan is missing in PricingCard.");
