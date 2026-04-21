@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getPackage } from "@/config/packages";
+import { getPackage } from "@/config/pricing";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
     const body = BodySchema.parse(json);
 
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!secret) throw new Error("Missing RAZORPAY_KEY_SECRET");
+    if (!secret) {
+      throw new Error("Missing RAZORPAY_KEY_SECRET");
+    }
 
     const generatedSignature = crypto
       .createHmac("sha256", secret)
@@ -34,72 +36,55 @@ export async function POST(req: NextRequest) {
 
     const admin = createSupabaseAdminClient();
 
-    const { data: payment, error: paymentError } = await admin
-      .from("payments")
-      .select("id, user_id, status, package_id")
+    const { data: paymentOrder, error: paymentError } = await admin
+      .from("payment_orders")
+      .select("id, user_id, status, plan_id")
       .eq("razorpay_order_id", body.razorpay_order_id)
       .maybeSingle();
 
-    if (paymentError || !payment) {
+    if (paymentError || !paymentOrder) {
       return NextResponse.json(
-        { ok: false, error: "Payment record not found." },
+        { ok: false, error: "Payment order record not found." },
         { status: 404 }
       );
     }
 
-    const pkg = getPackage(payment.package_id);
-    if (!pkg || pkg.isFree) {
+    const plan = getPackage(paymentOrder.plan_id);
+
+    if (!plan || plan.isFree) {
       return NextResponse.json(
-        { ok: false, error: "Invalid package on payment record." },
+        { ok: false, error: "Invalid plan on payment order." },
         { status: 400 }
       );
     }
 
-    if (payment.status !== "paid") {
+    if (paymentOrder.status !== "paid") {
       const { error: updateError } = await admin
-        .from("payments")
+        .from("payment_orders")
         .update({
           status: "paid",
           razorpay_payment_id: body.razorpay_payment_id,
           razorpay_signature: body.razorpay_signature,
           paid_at: new Date().toISOString(),
         })
-        .eq("id", payment.id);
+        .eq("id", paymentOrder.id);
 
       if (updateError) {
+        console.error("Failed to update payment order:", updateError);
+
         return NextResponse.json(
-          { ok: false, error: "Failed to update payment." },
+          { ok: false, error: "Failed to update payment order." },
           { status: 500 }
         );
       }
 
-      const expiresAt =
-        pkg.expiryDays == null
-          ? null
-          : new Date(Date.now() + pkg.expiryDays * 24 * 60 * 60 * 1000).toISOString();
-
-      const { error: grantError } = await admin.from("review_credit_grants").insert({
-        user_id: payment.user_id,
-        source: "purchase",
-        package_id: pkg.id,
-        total_credits: pkg.reviewCredits,
-        used_credits: 0,
-        starts_at: new Date().toISOString(),
-        expires_at: expiresAt,
-        source_payment_id: payment.id,
-      });
-
-      if (grantError) {
-        return NextResponse.json(
-          { ok: false, error: "Failed to grant review credits." },
-          { status: 500 }
-        );
-      }
+      // Credit grant logic can be added here later after your credit tables are finalized.
     }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Razorpay verify error:", error);
+
     return NextResponse.json(
       { ok: false, error: "Payment verification failed." },
       { status: 500 }

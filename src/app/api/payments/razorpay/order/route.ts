@@ -1,91 +1,119 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { getRazorpayInstance } from "@/lib/razorpay";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getPackage } from "@/config/packages";
+import { NextResponse } from "next/server";
+import Razorpay from "razorpay";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getPackage } from "@/config/pricing";
 
-export const runtime = "nodejs";
-
-const BodySchema = z.object({
-  packageId: z.string().min(1),
-});
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const body = await req.json();
+    const { planId } = body;
 
-    if (userError || !user) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
+    console.log("[razorpay/order] incoming planId:", planId);
 
-    const json = await req.json();
-    const { packageId } = BodySchema.parse(json);
+    const plan = getPackage(planId);
 
-    const selected = getPackage(packageId);
-
-    if (!selected || !selected.active || selected.isFree) {
+    if (!plan) {
       return NextResponse.json(
-        { ok: false, error: "Invalid package selected." },
+        { error: `Invalid planId: ${planId}` },
         { status: 400 }
       );
     }
 
-    const razorpay = getRazorpayInstance();
-    const receipt = `review_${user.id.slice(0, 8)}_${Date.now()}`;
+    if (plan.isFree) {
+      return NextResponse.json(
+        { error: "Free plan does not require payment." },
+        { status: 400 }
+      );
+    }
 
-    const order = await razorpay.orders.create({
-      amount: selected.amount,
-      currency: selected.currency,
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return NextResponse.json(
+        { error: "Missing Razorpay environment variables" },
+        { status: 500 }
+      );
+    }
+
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
+    const amount = plan.amount;
+    const currency = plan.currency || "INR";
+    const receipt = `rr_${Date.now()}`;
+
+    console.log("[razorpay/order] creating razorpay order", {
+      amount,
+      currency,
+      receipt,
+      planId: plan.id,
+    });
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount,
+      currency,
       receipt,
       notes: {
-        package_id: selected.id,
-        user_id: user.id,
-        review_credits: String(selected.reviewCredits),
-        expiry_days: String(selected.expiryDays ?? ""),
+        planId: plan.id,
+        planTitle: plan.title,
+        reviewCredits: String(plan.reviewCredits),
+        expiryDays:
+          plan.expiryDays === null ? "none" : String(plan.expiryDays),
       },
     });
 
-    const { error: insertError } = await supabase.from("payments").insert({
-      user_id: user.id,
-      package_id: selected.id,
-      amount: selected.amount,
-      currency: selected.currency,
-      status: "created",
-      razorpay_order_id: order.id,
-      receipt,
-      metadata: {
-        package_title: selected.title,
-        review_credits: selected.reviewCredits,
-        expiry_days: selected.expiryDays,
-      },
-    });
+    console.log("[razorpay/order] razorpay order created:", razorpayOrder.id);
 
-    if (insertError) {
+    const admin = createSupabaseAdminClient();
+
+    const payload = {
+      user_id: null,
+      razorpay_order_id: razorpayOrder.id,
+      receipt: razorpayOrder.receipt,
+      plan_id: plan.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      status: razorpayOrder.status,
+    };
+
+    console.log("[razorpay/order] saving to db:", payload);
+
+    const { data, error } = await admin
+      .from("payment_orders")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[razorpay/order] supabase insert failed:", error);
+
       return NextResponse.json(
-        { ok: false, error: "Could not save payment order." },
+        {
+          error: "DB insert failed",
+          details: error.message,
+          code: error.code,
+        },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       ok: true,
-      order: {
-        id: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        receipt: order.receipt,
-      },
-      package: selected,
-      keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      key: process.env.RAZORPAY_KEY_ID,
+      planId: plan.id,
+      savedOrder: data,
     });
-  } catch (error) {
-    console.error("Razorpay order create error:", error);
+  } catch (error: any) {
+    console.error("[razorpay/order] fatal error:", error);
+
     return NextResponse.json(
-      { ok: false, error: "Failed to create order." },
+      {
+        error: "Could not create payment order",
+        details: error?.message || "Unknown error",
+      },
       { status: 500 }
     );
   }

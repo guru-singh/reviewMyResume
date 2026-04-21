@@ -1,26 +1,25 @@
-import { PricingCard } from "@/components/PricingCard";
+import Link from "next/link";
 
-export function LockedPremiumSections() {
+export default function LockedPremiumSections() {
   return (
-    <section className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-6">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">
-          Premium analysis locked
+    <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="mx-auto max-w-3xl text-center">
+        <h2 className="text-2xl font-semibold text-slate-900">
+          Unlock more resume reviews
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Unlock the full report to see advanced ATS fixes, stronger bullet
-          rewrites, and targeted improvements.
+
+        <p className="mt-3 text-slate-600">
+          You’ve used your available reviews. Choose a review pack to continue.
         </p>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-4">
-          <div className="h-24 rounded-xl bg-white/70 blur-[1px]" />
-          <div className="h-24 rounded-xl bg-white/70 blur-[1px]" />
-          <div className="h-24 rounded-xl bg-white/70 blur-[1px]" />
+        <div className="mt-6">
+          <Link
+            href="/pricing"
+            className="inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            View review packs
+          </Link>
         </div>
-
-        <PricingCard />
       </div>
     </section>
   );

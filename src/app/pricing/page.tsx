@@ -7,6 +7,12 @@ import { loadRazorpayScript } from "@/lib/loadRazorpay";
 
 const packages = getPaidPackages();
 
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
 export default function PricingPage() {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f3f6fa_0%,#f7f1e8_100%)] px-4 py-16">
@@ -53,24 +59,24 @@ function PackageCard({ pkg }: { pkg: ReviewPackage }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          packageId: pkg.id,
+          planId: pkg.id,
         }),
       });
 
       const data = await res.json();
 
-      if (!data?.ok) {
+      if (!res.ok || !data?.ok) {
         alert(data?.error || "Failed to create payment");
         return;
       }
 
       const rzp = new window.Razorpay({
-        key: data.keyId,
-        amount: data.order.amount,
-        currency: data.order.currency,
+        key: data.key,
+        amount: data.amount,
+        currency: data.currency,
         name: "ReviewMyResume",
         description: pkg.title,
-        order_id: data.order.id,
+        order_id: data.orderId,
         handler: async function (response: {
           razorpay_payment_id: string;
           razorpay_order_id: string;
@@ -84,7 +90,7 @@ function PackageCard({ pkg }: { pkg: ReviewPackage }) {
 
           const v = await verify.json();
 
-          if (v.ok) {
+          if (verify.ok && v.ok) {
             window.location.href = "/payment/success";
           } else {
             window.location.href = "/payment/failure";
@@ -124,12 +130,6 @@ function PackageCard({ pkg }: { pkg: ReviewPackage }) {
       <p className="mt-2 text-sm text-slate-600">{pkg.description}</p>
 
       <div className="mt-6 text-5xl font-bold text-slate-900">{pkg.priceLabel}</div>
-
-      <p className="mt-1 text-sm text-slate-500">
-        {pkg.expiryDays === null
-          ? "No expiry"
-          : `Expires in ${pkg.expiryDays} day${pkg.expiryDays > 1 ? "s" : ""}`}
-      </p>
 
       <div className="mt-6 space-y-3 text-left text-sm text-slate-700">
         {pkg.features.map((feature, index) => (
