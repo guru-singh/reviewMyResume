@@ -12,7 +12,10 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/dashboard";
 
-  const response = NextResponse.redirect(new URL(next, url.origin));
+ // const response = NextResponse.redirect(new URL(next, url.origin));
+  const response = NextResponse.redirect(
+  "https://reviewmyresume-48414740448.asia-south1.run.app/dashboard"
+);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

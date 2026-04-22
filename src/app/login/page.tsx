@@ -122,9 +122,9 @@ export default function LoginPage() {
     const supabase = createSupabaseBrowserClient();
 
    const baseUrl = window.location.origin;
-    console.log('*********************************URLS*********************************');
-    console.log("OAuth redirectTo:", `${window.location.origin}/auth/callback?next=/dashboard`);
-    console.log('*********************************URLS*********************************');
+    // console.log('*********************************URLS*********************************');
+    // console.log("OAuth redirectTo:", `${window.location.origin}/auth/callback?next=/dashboard`);
+    // console.log('*********************************URLS*********************************');
 
     const { error } = await supabase.auth.signInWithOAuth({
   provider: "google",
