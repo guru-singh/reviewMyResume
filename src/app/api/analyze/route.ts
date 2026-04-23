@@ -12,8 +12,6 @@ const BodySchema = z.object({
   jobDescription: z.string().max(12000).optional().or(z.literal("")),
 });
 
-const FREE_LIMIT = 5;
-
 function shouldBypassAI() {
   return (process.env.BOOL_BYPASS_AI || "").trim().toLowerCase() === "true";
 }
@@ -67,14 +65,12 @@ const TEST_HTML_REPORT = `
 
 export async function POST(req: Request) {
   try {
-
     console.error("=== ANALYZE COOKIE CHECK START ===");
-   // console.error((await cookies()).getAll().map(c => c.name));
     console.error("=== ANALYZE COOKIE CHECK END ===");
 
     const bypassAI = shouldBypassAI();
-    //const supabase = createSupabaseServerClient({ request: req });
     const supabase = await createSupabaseServerClient();
+
     const {
       data: { user },
       error: userErr,
@@ -96,79 +92,173 @@ export async function POST(req: Request) {
       jobDescription: typeof jobDescription === "string" ? jobDescription : "",
     }).jobDescription;
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("plan, subscription_status")
+      .select("id, tokens_left")
       .eq("id", user.id)
       .maybeSingle();
 
-    const isPaidActive = profile?.plan === "paid" && profile?.subscription_status === "active";
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "Profile not found." },
+        { status: 500 }
+      );
+    }
 
-    if (!isPaidActive) {
-      const { count } = await supabase
-        .from("analyses")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
+    const currentTokens =
+      typeof profile.tokens_left === "number" ? profile.tokens_left : 0;
 
-      if ((count ?? 0) >= FREE_LIMIT) {
-        return NextResponse.json(
-          {
-            error: `Free limit reached (${FREE_LIMIT}). Please upgrade to continue.`,
-            code: "LIMIT_REACHED",
-          },
-          { status: 402 }
-        );
-      }
+    if (currentTokens <= 0) {
+      return NextResponse.json(
+        {
+          error: "No tokens left. Please purchase more to continue.",
+          code: "LIMIT_REACHED",
+        },
+        { status: 402 }
+      );
     }
 
     const resumeText = await extractTextFromResume(file);
+    const nowIso = new Date().toISOString();
 
-    const { error: insertErr } = await supabase.from("analyses").insert({
-      user_id: user.id,
-      filename: file.name,
-      resume_text: resumeText,
-      job_description: parsedJD || null,
-      ats_score: 76,
-      result: {
-        mode: bypassAI ? "test" : "live",
+    const { data: analysisRow, error: insertErr } = await supabase
+      .from("analyses")
+      .insert({
+        user_id: user.id,
+        filename: file.name,
+        resume_text: resumeText,
+        job_description: parsedJD || null,
+        ats_score: 76,
         status: "queued",
-      },
-    });
+        html_report: null,
+        error_message: null,
+        result: {
+          mode: bypassAI ? "test" : "live",
+          status: "queued",
+        },
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
+      .select("id")
+      .single();
 
-    if (insertErr) {
-      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    if (insertErr || !analysisRow) {
+      return NextResponse.json(
+        { error: insertErr?.message || "Failed to create analysis record." },
+        { status: 500 }
+      );
     }
 
-    if (bypassAI) {
-      return new NextResponse(TEST_HTML_REPORT, {
+    let finalHtmlReport = TEST_HTML_REPORT;
+
+    try {
+      if (!bypassAI) {
+        const { analyzeResumeWithLLM } = await import("@/lib/llm");
+        const llmResult = await analyzeResumeWithLLM({
+          resumeText,
+          jobDescription: parsedJD || undefined,
+        });
+
+        finalHtmlReport = llmResult.htmlReport;
+      }
+
+      const newBalance = currentTokens - 1;
+
+      const { error: analysisUpdateError } = await supabase
+        .from("analyses")
+        .update({
+          status: "success",
+          html_report: finalHtmlReport,
+          error_message: null,
+          result: {
+            mode: bypassAI ? "test" : "live",
+            status: "success",
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", analysisRow.id);
+
+      if (analysisUpdateError) {
+        return NextResponse.json(
+          { error: "Analysis completed but failed to save report." },
+          { status: 500 }
+        );
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({
+          tokens_left: newBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (profileUpdateError) {
+        return NextResponse.json(
+          { error: "Analysis completed but failed to update token balance." },
+          { status: 500 }
+        );
+      }
+
+      const { error: tokenTxnError } = await supabase
+        .from("token_transactions")
+        .insert({
+          user_id: user.id,
+          delta: -1,
+          balance_after: newBalance,
+          source_type: "analysis",
+          source_id: analysisRow.id,
+          note: `Consumed 1 token for analysis: ${file.name}`,
+        });
+
+      if (tokenTxnError) {
+        return NextResponse.json(
+          { error: "Analysis completed but failed to write token ledger." },
+          { status: 500 }
+        );
+      }
+
+      return new NextResponse(finalHtmlReport, {
         status: 200,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
         },
       });
+    } catch (llmError) {
+      console.error("=== ANALYZE LLM ERROR START ===");
+      console.error(llmError);
+      console.error("LLM ERROR MESSAGE:", getErrorMessage(llmError));
+      console.error("=== ANALYZE LLM ERROR END ===");
+
+      await supabase
+        .from("analyses")
+        .update({
+          status: "failed",
+          error_message: getErrorMessage(llmError),
+          result: {
+            mode: bypassAI ? "test" : "live",
+            status: "failed",
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", analysisRow.id);
+
+      return NextResponse.json(
+        { error: getErrorMessage(llmError, "Analysis failed.") },
+        { status: 500 }
+      );
     }
-
-    const { analyzeResumeWithLLM } = await import("@/lib/llm");
-    const llmResult = await analyzeResumeWithLLM({
-      resumeText,
-      jobDescription: parsedJD || undefined,
-    });
-
-    return new NextResponse(llmResult.htmlReport, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
   } catch (error) {
     console.error("=== ANALYZE ROUTE ERROR START ===");
     console.error(error);
     console.error("ERROR MESSAGE:", getErrorMessage(error));
     console.error("=== ANALYZE ROUTE ERROR END ===");
     console.error("[api/analyze error]", error);
-    const msg = getErrorMessage(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+
+    return NextResponse.json(
+      { error: getErrorMessage(error) },
+      { status: 500 }
+    );
   }
 }

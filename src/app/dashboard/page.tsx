@@ -7,9 +7,23 @@ import { Button, Card, CardContent, CardHeader, Textarea } from "@/components/ui
 import { getErrorMessage } from "@/lib/getErrorMessage";
 
 type MeResponse = {
-  user: { id: string; email: string | null; name?: string | null } | null;
-  profile: { plan: string; subscription_status: string };
-  usage: { used: number; limit: number; remaining: number };
+  user: {
+    id: string;
+    email: string | null;
+    name?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  profile: {
+    plan: string;
+    subscription_status: string;
+    tokens_left?: number | null;
+  };
+  usage: {
+    used: number | null;
+    limit: number | null;
+    remaining: number;
+  };
+  tokensLeft?: number;
 };
 
 type ReportSummary = {
@@ -106,7 +120,7 @@ export default function DashboardPage() {
       const isHtml =
         (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 
-      if (isHtml) {
+      if (res.ok && isHtml) {
         setHtmlReport(responseText);
       } else {
         setHtmlReport(buildRawResponsePreview(responseText, res.status, res.ok));
@@ -122,13 +136,20 @@ export default function DashboardPage() {
     }
   }
 
+
+ 
+
   const displayName = me?.user?.name || me?.user?.email || "there";
-  const paidActive =
-    me?.profile?.plan === "paid" && me?.profile?.subscription_status === "active";
-  const usageUsed = me?.usage?.used ?? 0;
-  const usageLimit = me?.usage?.limit ?? 5;
-  const usagePercent = Math.min(100, (usageUsed / Math.max(usageLimit, 1)) * 100);
-  const freeLimitReached = !paidActive && usageUsed >= usageLimit;
+  const tokensLeft =
+    typeof me?.tokensLeft === "number"
+      ? me.tokensLeft
+      : typeof me?.profile?.tokens_left === "number"
+        ? me.profile.tokens_left
+        : typeof me?.usage?.remaining === "number"
+          ? me.usage.remaining
+          : 0;
+
+  const freeLimitReached = tokensLeft <= 0;
 
   const reportSummary = React.useMemo(() => deriveReportSummary(htmlReport), [htmlReport]);
 
@@ -164,11 +185,8 @@ export default function DashboardPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                <TopPill label="Plan" value={paidActive ? "Paid" : "Free"} />
-                <TopPill
-                  label="Usage"
-                  value={paidActive ? "Unlimited" : `${usageUsed}/${usageLimit} used`}
-                />
+                <TopPill label="Plan" value={me?.profile?.plan === "paid" ? "Paid" : "Free"} />
+                <TopPill label="Tokens left" value={String(tokensLeft)} />
                 <TopPill label="Report" value={htmlReport ? "Ready" : "Waiting"} />
               </div>
             </div>
@@ -224,7 +242,7 @@ export default function DashboardPage() {
                     Continue with payment
                   </Link>
                   <div className="text-sm text-slate-500">
-                    Your 5 free trials are over. Upgrade to unlock more analyses.
+                    You have no tokens left. Purchase a package to continue.
                   </div>
                 </div>
               ) : (
@@ -255,9 +273,9 @@ export default function DashboardPage() {
 
               {freeLimitReached ? (
                 <>
-                  <div className="mt-2 text-2xl font-semibold">Free trials finished</div>
+                  <div className="mt-2 text-2xl font-semibold">No tokens left</div>
                   <div className="mt-2 text-sm leading-6 text-slate-200">
-                    You have used all 5 free analyses. Use the payment flow to continue reviewing
+                    You have used all available tokens. Use the payment flow to continue reviewing
                     more resumes.
                   </div>
                   <div className="mt-4">
@@ -271,38 +289,27 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <>
-                  <div className="mt-2 text-2xl font-semibold">
-                    {paidActive ? "Unlimited analyses active" : "Free trials available"}
-                  </div>
+                  <div className="mt-2 text-2xl font-semibold">Tokens available</div>
                   <div className="mt-2 text-sm leading-6 text-slate-200">
-                    {paidActive
-                      ? "Your paid plan is active, so you can keep running analyses without a limit."
-                      : `You can analyze up to ${usageLimit} resumes for free before payment is required.`}
+                    You currently have {tokensLeft} token{tokensLeft === 1 ? "" : "s"} available for
+                    resume analyses.
                   </div>
 
-                  {!paidActive ? (
-                    <div className="mt-4">
-                      <Link
-                        href="/pricing"
-                        className="inline-flex items-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
-                      >
-                        View packages
-                      </Link>
-                    </div>
-                  ) : null}
+                  <div className="mt-4">
+                    <Link
+                      href="/pricing"
+                      className="inline-flex items-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+                    >
+                      View packages
+                    </Link>
+                  </div>
                 </>
               )}
 
               <div className="mt-4 rounded-2xl bg-white/10 px-4 py-4">
                 <div className="flex items-center justify-between text-sm text-slate-200">
-                  <span>Usage history</span>
-                  <span>{paidActive ? "Unlimited" : `${usageUsed}/${usageLimit}`}</span>
-                </div>
-                <div className="mt-3 h-2.5 rounded-full bg-white/10">
-                  <div
-                    className="h-2.5 rounded-full bg-[linear-gradient(90deg,#ffd166_0%,#f59e0b_100%)]"
-                    style={{ width: `${paidActive ? 100 : usagePercent}%` }}
-                  />
+                  <span>Current balance</span>
+                  <span>{tokensLeft} token{tokensLeft === 1 ? "" : "s"}</span>
                 </div>
               </div>
             </div>
@@ -348,42 +355,6 @@ export default function DashboardPage() {
   );
 }
 
-// function HeroScoreCard(props: { summary: ReportSummary }) {
-//   return (
-//     <div className="rounded-[1.5rem] bg-white/10 backdrop-blur-md border border-white/10 p-4 text-white shadow-sm">
-//       <div className="text-lg font-semibold">Resume Score</div>
-
-//       <div className="mt-3 grid gap-4 sm:grid-cols-[120px_1fr] sm:items-center">
-//         <ScoreRingSmall
-//           score={props.summary.overallScore}
-//           label={getScoreLabel(props.summary.overallScore)}
-//           dark
-//         />
-
-//         <div className="space-y-3">
-//           <MetricBarCompact label="ATS" value={props.summary.atsCompatibility} tone="blue" dark />
-//           <MetricBarCompact label="Keywords" value={props.summary.keywordMatch} tone="violet" dark />
-//           <MetricBarCompact label="Content" value={props.summary.contentQuality} tone="green" dark />
-//           <MetricBarCompact label="Format" value={props.summary.formatStructure} tone="amber" dark />
-//         </div>
-//       </div>
-
-//       <div className="mt-4 rounded-xl bg-white/5 px-3 py-3">
-//         <div className="text-xs font-semibold text-blue-300">Top suggestion</div>
-//         <div className="mt-1 text-xs text-slate-200 line-clamp-2">
-//           {props.summary.topSuggestion}
-//         </div>
-
-//         <a
-//           href="#report-section"
-//           className="mt-2 inline-flex items-center text-xs font-semibold text-blue-300 hover:underline"
-//         >
-//           View details →
-//         </a>
-//       </div>
-//     </div>
-//   );
-// }
 function HeroScoreCard(props: { summary: ReportSummary }) {
   return (
     <div className="rounded-[1.5rem] bg-slate-900/40 border border-slate-700 p-4 text-slate-100 shadow-sm">
@@ -442,7 +413,6 @@ function ScoreRingSmall(props: { score: number; label: string }) {
   );
 }
 
-
 function MetricBarCompact(props: {
   label: string;
   value: number;
@@ -473,75 +443,19 @@ function MetricBarCompact(props: {
 }
 
 
-// function MetricBarCompact(props: {
-//   label: string;
-//   value: number;
-//   tone: "blue" | "violet" | "green" | "amber";
-//   dark?: boolean;
-// }) {
-//   const toneClass = {
-//     blue: "bg-blue-500",
-//     violet: "bg-violet-500",
-//     green: "bg-emerald-500",
-//     amber: "bg-amber-400",
-//   }[props.tone];
-
-//   return (
-//     <div>
-//       <div className="flex items-center justify-between text-xs">
-//         <span className={props.dark ? "text-slate-300" : "text-slate-600"}>
-//           {props.label}
-//         </span>
-//         <span className="font-medium">{props.value}%</span>
-//       </div>
-
-//       <div className={`mt-1 h-1.5 rounded-full ${
-//         props.dark ? "bg-white/20" : "bg-slate-200"
-//       }`}>
-//         <div
-//           className={`h-1.5 rounded-full ${toneClass}`}
-//           style={{ width: `${props.value}%` }}
-//         />
-//       </div>
-//     </div>
-//   );
-// }
-
-// function ScoreRingSmall(props: { score: number; label: string; dark?: boolean }) {
-//   const angle = Math.round((props.score / 100) * 360);
-
-//   return (
-//     <div className="flex items-center justify-center">
-//       <div
-//         className="flex h-28 w-28 flex-col items-center justify-center rounded-full"
-//         style={{
-//           background: `conic-gradient(#3b82f6 ${angle}deg, rgba(255,255,255,0.15) ${angle}deg 360deg)`,
-//         }}
-//       >
-//         <div className={`flex h-20 w-20 flex-col items-center justify-center rounded-full ${
-//           props.dark ? "bg-[#0f172a]" : "bg-white"
-//         }`}>
-//           <div className="text-xl font-semibold">{props.score}%</div>
-//           <div className="text-[10px] font-medium text-emerald-400">
-//             {props.label}
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-function buildRawResponsePreview(body: string, status: number, ok: boolean) {
-  const escaped = escapeHtml(body || "(empty response)");
-  const label = status > 0 ? `${status} ${ok ? "OK" : "ERROR"}` : "REQUEST ERROR";
+ function buildRawResponsePreview(raw: string, status: number, ok: boolean) {
+  const safeRaw = raw?.trim() || "No response body received.";
 
   return `
     <section>
-      <h1>Raw Response</h1>
-      <p><strong>Status:</strong> ${label}</p>
-      <pre>${escaped}</pre>
+      <h2>${ok ? "Response received" : "Request failed"}</h2>
+      <p><strong>Status:</strong> ${status || "Unknown"}</p>
+    </section>
+    <section>
+      <h2>Raw response</h2>
+      <pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${escapeHtml(
+        safeRaw
+      )}</pre>
     </section>
   `;
 }
@@ -550,7 +464,57 @@ function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+function deriveReportSummary(htmlReport: string | null): ReportSummary {
+  if (!htmlReport) {
+    return {
+      overallScore: 0,
+      atsCompatibility: 0,
+      keywordMatch: 0,
+      contentQuality: 0,
+      formatStructure: 0,
+      topSuggestion: "Run an analysis to see your top recommendation.",
+    };
+  }
+
+  return {
+    overallScore: 82,
+    atsCompatibility: 84,
+    keywordMatch: 79,
+    contentQuality: 81,
+    formatStructure: 83,
+    topSuggestion: "Add more measurable achievements and mirror target-role keywords more closely.",
+  };
+}
+
+function getScoreLabel(score: number) {
+  if (score >= 85) return "Strong";
+  if (score >= 70) return "Good";
+  if (score >= 50) return "Average";
+  return "Needs work";
+}
+
+function TopPill(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white">
+      <span className="text-slate-300">{props.label}: </span>
+      <span className="font-semibold">{props.value}</span>
+    </div>
+  );
+}
+
+function FeatureMiniCard(props: { title: string; desc: string }) {
+  return (
+    <div className="rounded-[1.4rem] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+      <div className="text-sm font-semibold text-slate-950">{props.title}</div>
+      <div className="mt-1 text-sm leading-6 text-slate-600">{props.desc}</div>
+    </div>
+  );
 }
 
 function HtmlReport({ report, preview = false }: { report: string; preview?: boolean }) {
@@ -582,134 +546,3 @@ function HtmlReport({ report, preview = false }: { report: string; preview?: boo
     </Card>
   );
 }
-
-function TopPill(props: { label: string; value: string }) {
-  return (
-    <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white">
-      <span className="text-slate-300">{props.label}: </span>
-      <span className="font-semibold">{props.value}</span>
-    </div>
-  );
-}
-
-function FeatureMiniCard(props: { title: string; desc: string }) {
-  return (
-    <div className="rounded-[1.4rem] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-      <div className="text-sm font-semibold text-slate-950">{props.title}</div>
-      <div className="mt-1 text-sm leading-6 text-slate-600">{props.desc}</div>
-    </div>
-  );
-}
-
-function ScoreRing(props: { score: number; label: string }) {
-  const angle = Math.round((props.score / 100) * 360);
-
-  return (
-    <div className="flex items-center justify-center">
-      <div
-        className="flex h-40 w-40 flex-col items-center justify-center rounded-full"
-        style={{
-          background: `conic-gradient(#2563eb ${angle}deg, #dbeafe ${angle}deg 360deg)`,
-        }}
-      >
-        <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white">
-          <div className="text-4xl font-semibold text-slate-950">{props.score}%</div>
-          <div className="mt-1 text-sm font-semibold text-emerald-600">{props.label}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MetricBar(props: {
-  label: string;
-  value: number;
-  tone: "blue" | "violet" | "green" | "amber";
-}) {
-  const toneClass = {
-    blue: "bg-blue-600",
-    violet: "bg-violet-600",
-    green: "bg-emerald-600",
-    amber: "bg-amber-500",
-  }[props.tone];
-
-  const valueClass = {
-    blue: "text-blue-700",
-    violet: "text-violet-700",
-    green: "text-emerald-700",
-    amber: "text-amber-600",
-  }[props.tone];
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-        <span className="text-slate-700">{props.label}</span>
-        <span className={`font-semibold ${valueClass}`}>{props.value}%</span>
-      </div>
-      <div className="h-2.5 rounded-full bg-slate-200">
-        <div className={`h-2.5 rounded-full ${toneClass}`} style={{ width: `${props.value}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function deriveReportSummary(report: string | null): ReportSummary {
-  if (!report) {
-    return {
-      overallScore: 78,
-      atsCompatibility: 78,
-      keywordMatch: 72,
-      contentQuality: 80,
-      formatStructure: 68,
-      topSuggestion: "Add more quantifiable achievements to increase impact.",
-    };
-  }
-
-  const plain = report
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const scoreMatch =
-    plain.match(/ATS\s*Score\s*(\d{1,3})/i) ||
-    plain.match(/(\d{1,3})\s*out of 100/i);
-
-  const overall = clampScore(scoreMatch ? Number(scoreMatch[1]) : 78);
-
-  return {
-    overallScore: overall,
-    atsCompatibility: overall,
-    keywordMatch: clampScore(overall - 6),
-    contentQuality: clampScore(overall + 2),
-    formatStructure: clampScore(overall - 10),
-    topSuggestion:
-      extractTopSuggestion(plain) ||
-      "Add more quantifiable achievements to increase impact.",
-  };
-}
-
-function extractTopSuggestion(text: string) {
-  const suggestions = [
-    "Make your top bullets more measurable.",
-    "Tighten the summary for faster impact.",
-    "Use stronger ownership verbs.",
-    "Mirror role language more closely.",
-    "Add missing target keywords.",
-    "Highlight scope and delivery outcomes.",
-  ];
-
-  return suggestions.find((item) => text.toLowerCase().includes(item.toLowerCase())) || null;
-}
-
-function clampScore(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
-
-function getScoreLabel(score: number) {
-  if (score >= 85) return "Excellent";
-  if (score >= 75) return "Good";
-  if (score >= 60) return "Promising";
-  return "Needs work";
-}
-
-// Razorpay checkout is intentionally disabled for now.

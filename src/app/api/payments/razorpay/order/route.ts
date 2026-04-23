@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPackage } from "@/config/pricing";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { planId } = body;
-
-    //console.log("[razorpay/order] incoming planId:", planId);
 
     const plan = getPackage(planId);
 
@@ -47,6 +58,7 @@ export async function POST(req: Request) {
       currency,
       receipt,
       planId: plan.id,
+      userId: user.id,
     });
 
     const razorpayOrder = await razorpay.orders.create({
@@ -54,6 +66,7 @@ export async function POST(req: Request) {
       currency,
       receipt,
       notes: {
+        userId: user.id,
         planId: plan.id,
         planTitle: plan.title,
         reviewCredits: String(plan.reviewCredits),
@@ -65,15 +78,20 @@ export async function POST(req: Request) {
     console.log("[razorpay/order] razorpay order created:", razorpayOrder.id);
 
     const admin = createSupabaseAdminClient();
+    const nowIso = new Date().toISOString();
 
     const payload = {
-      user_id: null,
+      user_id: user.id,
       razorpay_order_id: razorpayOrder.id,
       receipt: razorpayOrder.receipt,
       plan_id: plan.id,
+      package_name: plan.title,
+      tokens_purchased: plan.reviewCredits,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
-      status: razorpayOrder.status,
+      status: "created",
+      created_at: nowIso,
+      updated_at: nowIso,
     };
 
     console.log("[razorpay/order] saving to db:", payload);
