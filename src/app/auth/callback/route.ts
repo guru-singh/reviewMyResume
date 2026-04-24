@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/dashboard";
 
+  //asdfasfasfasfa
+
  // const response = NextResponse.redirect(new URL(next, url.origin));
 //   "https://reviewmyresume-48414740448.asia-south1.run.app/dashboard"
  const response = NextResponse.redirect("https://reviewmyresume-48414740448.asia-southeast1.run.app/dashboard");
