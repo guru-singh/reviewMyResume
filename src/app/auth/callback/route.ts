@@ -17,10 +17,12 @@ export async function GET(req: NextRequest) {
 
  // const response = NextResponse.redirect(new URL(next, url.origin));
 //   "https://reviewmyresume-48414740448.asia-south1.run.app/dashboard"
- const response = NextResponse.redirect("https://reviewmyresume-48414740448.asia-southeast1.run.app/dashboard");
+ //const response = NextResponse.redirect("https://reviewmyresume-48414740448.asia-southeast1.run.app/dashboard");
 
 //  //const response = NextResponse.redirect(env.NEXT_PUBLIC_BASE_URL?.toString);
 //  const response = NextResponse.redirect(new URL(next, process.env.NEXT_PUBLIC_BASE_URL+'/dashboard'));
+
+ const response = NextResponse.redirect("https://reviewmyresume.freeatsreview.com/dashboard");
 
 
   const supabase = createServerClient(
