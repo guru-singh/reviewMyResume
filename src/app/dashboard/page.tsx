@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [htmlReport, setHtmlReport] = React.useState<string | null>(null);
+  const [consent, setConsent] = React.useState(false);
 
   async function loadMe() {
     const res = await fetch("/api/me", { cache: "no-store" });
@@ -100,6 +101,11 @@ export default function DashboardPage() {
     setError(null);
     setHtmlReport(null);
 
+    if (!consent) {
+      setError("Please accept the Terms, Refund Policy, and Privacy Policy consent to continue.");
+      return;
+    }
+
     if (!file) {
       setError("Please upload a resume (PDF/DOCX)");
       return;
@@ -113,6 +119,9 @@ export default function DashboardPage() {
 
       const res = await fetch("/api/analyze", {
         method: "POST",
+        headers: {
+          "x-user-consent": "true",
+        },
         body: form,
       });
 
@@ -137,7 +146,7 @@ export default function DashboardPage() {
   }
 
 
- 
+
 
   const displayName = me?.user?.name || me?.user?.email || "there";
   const tokensLeft =
@@ -233,11 +242,51 @@ export default function DashboardPage() {
                 className="rounded-2xl border-neutral-300 px-4 py-3"
               />
 
+
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => {
+                    setConsent(e.target.checked);
+                    if (e.target.checked && error?.toLowerCase().includes("consent")) {
+                      setError(null);
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" className="font-medium text-slate-950 underline underline-offset-2">
+                    Terms & Conditions
+                  </Link>
+                  ,{" "}
+                  <Link href="/refund" className="font-medium text-slate-950 underline underline-offset-2">
+                    Refund Policy
+                  </Link>
+                  , and consent to the processing of my data as described in the{" "}
+                  <Link href="/privacy" className="font-medium text-slate-950 underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                  . You are responsible for reviewing and verifying all suggestions before use.
+                </span>
+              </label>
+
               {freeLimitReached ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Link
-                    href="/pricing"
-                    className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    href={consent ? "/pricing" : "#"}
+                    onClick={(e) => {
+                      if (!consent) {
+                        e.preventDefault();
+                        setError("Please accept the Terms, Refund Policy, and Privacy Policy consent before proceeding.");
+                      }
+                    }}
+                    className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition ${consent
+                        ? "bg-slate-950 text-white hover:bg-slate-800"
+                        : "cursor-not-allowed bg-slate-300 text-slate-500"
+                      }`}
+                    aria-disabled={!consent}
                   >
                     Continue with payment
                   </Link>
@@ -247,7 +296,13 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <Button onClick={runAnalysis} isLoading={loading} className="rounded-2xl px-5 py-3">
+                  <Button
+                    onClick={runAnalysis}
+                    isLoading={loading}
+                    disabled={!consent || loading}
+                    className={`rounded-2xl px-5 py-3 ${!consent ? "cursor-not-allowed opacity-50" : ""
+                      }`}
+                  >
                     Analyze resume
                   </Button>
                   <div className="text-sm text-slate-500">
@@ -271,6 +326,9 @@ export default function DashboardPage() {
             >
               <div className="text-sm font-semibold">Access status</div>
 
+
+
+
               {freeLimitReached ? (
                 <>
                   <div className="mt-2 text-2xl font-semibold">No tokens left</div>
@@ -280,8 +338,19 @@ export default function DashboardPage() {
                   </div>
                   <div className="mt-4">
                     <Link
-                      href="/pricing"
-                      className="inline-flex items-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+                      href={consent ? "/pricing" : "#"}
+                      onClick={(e) => {
+                        if (!consent) {
+                          e.preventDefault();
+                          setError("Please accept the Terms, Refund Policy, and Privacy Policy consent before proceeding.");
+                          document.getElementById("new-analysis")?.scrollIntoView({ behavior: "smooth" });
+                        }
+                      }}
+                      className={`inline-flex items-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${consent
+                          ? "bg-white text-slate-950 hover:bg-slate-100"
+                          : "cursor-not-allowed bg-white/60 text-slate-500"
+                        }`}
+                      aria-disabled={!consent}
                     >
                       Open payment options
                     </Link>
@@ -443,7 +512,7 @@ function MetricBarCompact(props: {
 }
 
 
- function buildRawResponsePreview(raw: string, status: number, ok: boolean) {
+function buildRawResponsePreview(raw: string, status: number, ok: boolean) {
   const safeRaw = raw?.trim() || "No response body received.";
 
   return `
@@ -454,8 +523,8 @@ function MetricBarCompact(props: {
     <section>
       <h2>Raw response</h2>
       <pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${escapeHtml(
-        safeRaw
-      )}</pre>
+    safeRaw
+  )}</pre>
     </section>
   `;
 }
