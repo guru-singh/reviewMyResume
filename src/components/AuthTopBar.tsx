@@ -110,7 +110,7 @@ export function AuthTopBar() {
             R
           </div>
           <span className="text-sm font-semibold text-slate-900 hidden sm:inline">
-            ResumeLab
+            Review my Resume
           </span>
         </Link>
 
